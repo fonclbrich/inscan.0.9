@@ -22,7 +22,7 @@ ST_FLASH ?= st-flash
 # specify compiler flags
 CFLAGS  = -O2 -Wall
 CFLAGS += -mlittle-endian -mthumb -mcpu=cortex-m3 -mthumb-interwork
-CFLAGS += -DSTM32F10X_MD -DUSE_STDPERIPH_DRIVER -DDEBUG_USB
+CFLAGS += -DSTM32F10X_MD -DUSE_STDPERIPH_DRIVER -DDEBUG_USB -DDEBUG_SCSI
 CFLAGS += -Wl,--gc-sections
 CFLAGS += -Iinclude
 CFLAGS += -I$(STD_PERIPH_LIBS)/Libraries/CMSIS/CM3/DeviceSupport/ST/STM32F10x/

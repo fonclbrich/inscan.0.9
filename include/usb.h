@@ -47,6 +47,8 @@
 #define USB_SETUP_DESC_STRING			0x03
 #define USB_SETUP_DESC_HID				0x22
 
+#define CBW_SIGN				0x43425355
+
 typedef struct
 {
 	uint16_t	features;
@@ -145,17 +147,14 @@ typedef struct
 	uint8_t		LUN;
 	uint8_t		CBlength;
 	uint8_t		commandBlock[0x10];
-} USB_command_block_wrapper;
-
+} __attribute__((packed)) USB_command_block_wrapper;
 
 void USBinit();
-void USBbulkSend(void *data, int length);
-
 void USBdisable();
 void USBresume();
-//void USBpause();
+void USBpause();
 void USBsetAddress(uint8_t newAddress);
-//uint8_t USBgetAddress();
+uint8_t USBgetAddress();
 void USBconfigEPs(USB_EP_block_t *EPs, int nEP);
 int USBepRead(int EPid, void *buf, int len);
 int USBepSend(int EPid, const void *src, int len);

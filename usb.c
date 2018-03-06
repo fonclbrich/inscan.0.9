@@ -6,6 +6,7 @@
  */
 
 #include "app_spec.h"
+#include "scsi.h"
 #include <debug.h>
 #include <usb.h>
 
@@ -13,6 +14,7 @@ extern uint16_t *USBstringDesc[];
 extern const USB_device_descriptor_t USBdevDesc;
 extern const USB_combined_MS_descriptor_t USBcomboMSdesc;
 extern USB_EP_block_t EPConfig;
+extern const uint8_t USB_MAX_LUN;
 
 #ifdef DEBUG_USB
 void dumpUSBSetupPacket(USB_setup_packet_t *setupPacket)
@@ -35,6 +37,38 @@ void dumpUSBSetupPacket(USB_setup_packet_t *setupPacket)
 	debugSendString("wLength: ");
 	debugSendString(hex2str(setupPacket->wLength, &numBuf[0xD]));
 }
+
+void dumpCBW(USB_command_block_wrapper *cbw)
+{
+	debugSendString("signature: ");
+	debugSendString(Dhex2str(cbw->signature));
+
+	debugSendString("\ntag: ");
+	debugSendString(Dhex2str(cbw->tag));
+
+	debugSendString("\ndataTransferLength: ");
+	debugSendString(Dhex2str(cbw->dataTransferLength));
+
+	debugSendString("\nflags: ");
+	debugSendString(Dhex2str(cbw->flags));
+
+	debugSendString("\nLUN: ");
+	debugSendString(Dhex2str(cbw->LUN));
+
+	debugSendString("\nCBlength ");
+	debugSendString(Dhex2str(cbw->CBlength));
+
+	debugSendString("\nCommandBlock: ");
+
+	for (int n = 0; n != cbw->CBlength; n++)
+	{
+		debugSendString(Dhex2str(cbw->commandBlock[n]));
+		debugSendString(" ");
+	}
+
+	debugSendString("\n");
+}
+
 #endif
 
 void USBCallback(uint16_t event)
@@ -60,7 +94,7 @@ void USBCallback(uint16_t event)
 			debugSendString("Incorrect SETUP on EP");
 			debugSendString(Dhex2str(EPid));
 			debugSendString(" !\n");
-			//USBdisable();
+			USBdisable();
 			return;
 		}
 
@@ -151,8 +185,8 @@ void USBCallback(uint16_t event)
 #ifdef DEBUG_USB
 				debugSendString("Max LUN requested.\n");
 #endif
-				uint8_t maxLun = 0;
-				USBepSend(0, &maxLun, 1);
+				//uint8_t maxLun = 0;
+				USBepSend(0, &USB_MAX_LUN, 1);
 
 				return;
 
@@ -191,6 +225,25 @@ else
 		return;
 
 	case USBtransOut :
+		if (EPid == 2)
+		{
+			USB_command_block_wrapper cbw;
+			USBepRead(2, &cbw, sizeof(cbw));
+
+			if (CBW_SIGN != cbw.signature  || USB_MAX_LUN < cbw.LUN || 0x10 < cbw.CBlength  || 0 == cbw.CBlength)
+			{
+				debugSendString("CBW Data makes no sense:\n");
+#ifdef DEBUG_USB
+				dumpCBW(&cbw);
+#endif
+			}
+			else
+			{
+				(SCSIhandleCommandBlock(cbw.commandBlock, cbw.CBlength));
+				return;
+			}
+		}
+
 		debugSendString("Out transaction.\n");
 		USBdisable();
 		break;

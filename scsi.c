@@ -10,9 +10,19 @@
 #include <usb.h>
 #include <debug.h>
 
-extern const uint8_t USB_MAX_LUN;
-
 int SCSIhandleCommandBlock(uint8_t *CB, uint8_t len);
+
+#ifdef DEBUG_SCSI
+void dropCommandBlock(uint8_t *CB, uint8_t len)
+{
+	for (int n = 0; n != len; n++)
+	{
+		debugSendString(Dhex2str(CB[n]));
+		debugSendString(" ");
+	}
+
+}
+#endif
 
 static const uint8_t inquiryData[0x24] =
 {
@@ -29,70 +39,26 @@ static const uint8_t inquiryData[0x24] =
 		'0', '.', '0', '1'
 };
 
-#ifdef DEBUG_USB
-void dumpCBW(USB_command_block_wrapper *cbw)
-{
-	debugSendString("signature: ");
-	debugSendString(Dhex2str(cbw->signature));
-
-	debugSendString("\ntag: ");
-	debugSendString(Dhex2str(cbw->tag));
-
-	debugSendString("\ndataTransferLength: ");
-	debugSendString(Dhex2str(cbw->dataTransferLength));
-
-	debugSendString("\nflags: ");
-	debugSendString(Dhex2str(cbw->flags));
-
-	debugSendString("\nLUN: ");
-	debugSendString(Dhex2str(cbw->LUN));
-
-	debugSendString("\nCBlength ");
-	debugSendString(Dhex2str(cbw->CBlength));
-
-	debugSendString("\nCommandBlock: ");
-
-	for (int n = 0; n != cbw->CBlength; n++)
-	{
-		debugSendString(Dhex2str(cbw->commandBlock[n]));
-		debugSendString(" ");
-	}
-
-	debugSendString("\n");
-}
-
-#endif
-
-int USBhandleCBW(USB_command_block_wrapper *cbw)
-{
-	if (CBW_SIGN != cbw->signature  || USB_MAX_LUN < cbw->LUN || 0x10 < cbw->CBlength  || 0 == cbw->CBlength)
-	{
-		debugSendString("Data makes no sense:\n");
-#ifdef DEBUG_USB
-		dumpCBW(cbw);
-#endif
-
-	return -1;
-	}
-
-	return SCSIhandleCommandBlock(cbw->commandBlock, cbw->CBlength);
-}
-
-
 int SCSIhandleCommandBlock(uint8_t *CB, uint8_t len)
 {
+#ifdef DEBUG_SCSI
+	debugSendString("New SCSI command string: ");
+	dropCommandBlock(CB, len);
+	debugSendString("\n");
+#endif
+
 	switch (CB[0])
 	{
 	case SCSI_CMD_INQUIRY:
 		if ((CB[1] & 3) != 0 || CB[2] != 0)
 		{
-#ifdef DEBUG_USB
+#ifdef DEBUG_SCSI
 			debugSendString("Strange flags in SCSI INQUIRY request!");
 #endif
 			return 0x10;
 		}
 
-	//	USBbulkSend(&inquiryData, sizeof(inquiryData));
+		USBepSend(1, &inquiryData, sizeof(inquiryData));
 		return 0;
 
 	default:
