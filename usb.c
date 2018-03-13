@@ -9,7 +9,7 @@
 #include "scsi.h"
 #include <debug.h>
 #include <usb.h>
-
+void ttfunc();
 extern uint16_t *USBstringDesc[];
 extern const USB_device_descriptor_t USBdevDesc;
 extern const USB_combined_MS_descriptor_t USBcomboMSdesc;
@@ -164,6 +164,7 @@ void USBCallback(uint16_t event)
 				return;
 
 			case USB_SETUP_SET_CONFIGURATION :
+
 #ifdef DEBUG_USB
 				debugSendString("New configuration assigned: ");
 				debugSendString(Dhex2str(setup.wValue & 0x7F));
@@ -227,6 +228,9 @@ else
 	case USBtransOut :
 		if (EPid == 2)
 		{
+			debugSendString("Data on EP2!\n");
+			USBdisable();
+
 			USB_command_block_wrapper cbw;
 			USBepRead(2, &cbw, sizeof(cbw));
 

@@ -9,6 +9,18 @@
 #include "usb.h"
 #include "debug.h"
 #include "../app_spec.h"
+void printUSBstate()
+{
+	debugSendString(Dhex2str(USB->EP0R) );
+	debugSendString("  ");
+	debugSendString(Dhex2str(USB->EP1R) );
+	debugSendString("  ");
+	debugSendString(Dhex2str(USB->EP2R) );
+	debugSendString("  ");
+	debugSendString(Dhex2str(USB->ISTR) );
+	debugSendString("  ");
+	debugSendString(Dhex2str(USB->DADDR) );
+}
 
 void USBinit()
 {
@@ -56,15 +68,35 @@ void USBinit()
 void USB_LP_CAN1_RX0_IRQHandler()
 {
 	uint16_t ISTR = USB->ISTR;
+	 if ((ISTR & USB_EP_EA) == 2)
+	 {
+		 debugSendString("EP2!!");
+		 NVIC_DisableIRQ(USB_LP_CAN1_RX0_IRQn);
+	 }
 
     if (ISTR & USB_ISTR_RESET)
     {
+#ifdef DEBUG_USB
+	debugSendString("Reset....\n");
+#endif
+
         /* Reset Request */
-        USB->ISTR = ~USB_ISTR_RESET; // Clear interrupt
-        USB->EP0R = ( ((USB->EP0R & (USB_EP_STAT_TX | USB_EP_STAT_RX)) ^ (USB_RX_VALID | USB_TX_NAK))
-        			|  USB_EP_CONTROL | USB_CLEAR_MASK ) & ~(USB_EP_DTOG_RX | USB_EP_DTOG_TX);
-        USBAppCallback(USBresetCmd);
-        return;
+    	USB->ISTR = ~USB_ISTR_RESET; // Clear interrupt
+
+    	/* Set Buffer Description Table address */
+    	USB->BTABLE = 0x0000U;
+
+    	USB_BDT(USB_EP0)->ADDR_TX =  USB_BDT(USB_EP0)->ADDR_RX = 0x0040;
+
+
+    	/* Set block size to 32 bytes and number of blocks to 2 */
+    	USB_BDT(USB_EP0)->COUNT_RX = USB_COUNT0_RX_BLSIZE | USB_COUNT0_RX_NUM_BLOCK_1;
+
+         USB->EP0R = ( ((USB->EP0R & (USB_EP_STAT_TX | USB_EP_STAT_RX)) ^ (USB_RX_VALID | USB_TX_NAK))
+    	    		|  USB_EP_CONTROL | USB_CLEAR_MASK ) & ~(USB_EP_DTOG_RX | USB_EP_DTOG_TX);
+
+  	    USBAppCallback(USBresetCmd);
+    	return;
     }
 
     if (0 != (ISTR & USB_ISTR_CTR) )
@@ -73,7 +105,6 @@ void USB_LP_CAN1_RX0_IRQHandler()
     	{
     		if (0 != (USB->EP0R & USB_EP_SETUP) )
     		{
-
     			/* Setup requested. */
 
     			/* Clear RX bit */
@@ -177,8 +208,9 @@ void USBconfigEPs(USB_EP_block_t *EPs, int nEP)
 			debugSendString(Dhex2str(USB_EP(EPs[nEP].EPid)));
 			debugSendString("\n");
 #endif
-	}
 
+	}
+	debugSendString("X\n");
 }
 
 int USBepRead(int EPid, void *buf, int len)
