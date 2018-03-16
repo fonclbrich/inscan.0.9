@@ -48,6 +48,11 @@
 #define USB_SETUP_DESC_HID				0x22
 
 #define CBW_SIGN				0x43425355
+#define CSW_SIGN				0x53425355
+
+#define USB_CSW_COMMAND_PASSED	0x00
+#define USB_CSW_COMMAND_FAILED	0x01
+#define USB_CSW_PHASE_ERROR		0x02
 
 typedef struct
 {
@@ -148,6 +153,14 @@ typedef struct
 	uint8_t		CBlength;
 	uint8_t		commandBlock[0x10];
 } __attribute__((packed)) USB_command_block_wrapper;
+
+typedef struct
+{
+	uint32_t	signature;
+	uint32_t	tag;
+	uint32_t	dataResidue;
+	uint8_t		status;
+} __attribute__((packed)) USB_command_status_wrapper;
 
 void USBinit();
 void USBdisable();

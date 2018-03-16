@@ -72,7 +72,7 @@ typedef struct {
 } USB_TypeDef;
 
 #define USB_BASE        ((uint32_t)0x40005C00)
-#define USB_EP(n)       (*((uint16_t *) (USB_BASE + 4*n)))
+#define USB_EP(n)       (*((volatile uint16_t *) (USB_BASE + 4*n)))
 #define USB             ((USB_TypeDef *) USB_BASE)
 
 typedef struct {

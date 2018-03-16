@@ -64,17 +64,68 @@ void USBinit()
     USB->CNTR |= (USB_CNTR_CTRM | USB_CNTR_RESETM);
     NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn); //Enable the USB NVIC interrupts
 }
+void USBreset(void)
+{
+#ifdef DEBUG_USB
+	debugSendString("Resetting USB.\n");
+#endif
+
+    /* Enable device (and set the device address to zero */
+    USB->DADDR = USB_DADDR_EF;
+
+    /* Enable endpoints  */
+    // Endpoint zero (control)
+    USB_BDT(USB_EP0)->ADDR_TX = 0x0040;
+    USB_BDT(USB_EP0)->ADDR_RX = 0x0080;
+
+    // Endpoint one
+    USB_BDT(USB_EP1)->ADDR_TX = 0x00C0;
+
+    USB_BDT(USB_EP2)->ADDR_RX = 0x0100;
+
+    /* Set block size to 32 bytes and number of blocks to 2 */
+    USB_BDT(USB_EP0)->COUNT_RX = USB_COUNT0_RX_BLSIZE | USB_COUNT0_RX_NUM_BLOCK_1;
+    USB_BDT(USB_EP2)->COUNT_RX = USB_COUNT0_RX_BLSIZE | USB_COUNT0_RX_NUM_BLOCK_1;
+
+    /* Set Buffer Description Table address */
+    USB->BTABLE = 0x0000U;
+
+
+    /*
+     * Set the endpoint types.
+     * Also, start with TX NAK, because we have nothing prepared to send
+     */
+
+    USB->EP0R = ( ((USB->EP0R & (USB_EP_STAT_TX | USB_EP_STAT_RX)) ^ (USB_RX_VALID | USB_TX_NAK))
+    		|  USB_EP_CONTROL | USB_CLEAR_MASK ) & ~(USB_EP_DTOG_RX | USB_EP_DTOG_TX);
+
+
+    USB->EP1R = ( ( (USB->EP1R & (USB_EP_STAT_TX | USB_EP_STAT_RX )) ^ (USB_RX_NAK | USB_TX_NAK))
+    		|  USB_EP_BULK | USB_CLEAR_MASK | 0x0001) & ~( USB_EP_DTOG_RX | USB_EP_DTOG_TX | 0x000E);
+
+    USB->EP2R = ( ( (USB->EP2R & (USB_EP_STAT_TX | USB_EP_STAT_RX )) ^ (USB_RX_VALID | USB_TX_NAK))
+    		|  USB_EP_BULK | USB_CLEAR_MASK | 0x0002) & ~( USB_EP_DTOG_RX | USB_EP_DTOG_TX | 0x000D);
+
+  /*  debugSendString("Reset status: ");
+    debugSendString(Dhex2str(USB->EP0R));
+    debugSendString(" ");
+    debugSendString(Dhex2str( USB->DADDR));
+    debugSendString(" ");
+    debugSendString(Dhex2str( USB->ISTR));
+    debugSendString("\n");*/
+}
 
 void USB_LP_CAN1_RX0_IRQHandler()
 {
-	uint16_t ISTR = USB->ISTR;
-	 if ((ISTR & USB_EP_EA) == 2)
-	 {
-		 debugSendString("EP2!!");
-		 NVIC_DisableIRQ(USB_LP_CAN1_RX0_IRQn);
-	 }
+#ifdef DEBUG_USB
+	debugSendString("E: ");
+	printUSBstate();
+	debugSendString("\n");
+#endif
 
-    if (ISTR & USB_ISTR_RESET)
+	uint16_t ISTR = USB->ISTR;
+
+    if (0 != (ISTR & USB_ISTR_RESET))
     {
 #ifdef DEBUG_USB
 	debugSendString("Reset....\n");
@@ -82,6 +133,9 @@ void USB_LP_CAN1_RX0_IRQHandler()
 
         /* Reset Request */
     	USB->ISTR = ~USB_ISTR_RESET; // Clear interrupt
+
+//    	USBreset();
+    	//return;
 
     	/* Set Buffer Description Table address */
     	USB->BTABLE = 0x0000U;
@@ -101,7 +155,7 @@ void USB_LP_CAN1_RX0_IRQHandler()
 
     if (0 != (ISTR & USB_ISTR_CTR) )
     {
-    	if (ISTR & USB_ISTR_DIR)
+    	if (0 != (ISTR & USB_ISTR_DIR) )
     	{
     		if (0 != (USB->EP0R & USB_EP_SETUP) )
     		{
@@ -115,6 +169,7 @@ void USB_LP_CAN1_RX0_IRQHandler()
     		}
 
     		USBAppCallback(USBtransOut | ((ISTR & USB_EP_EA) << 8) );
+
     		return;
     	}
 
@@ -210,19 +265,11 @@ void USBconfigEPs(USB_EP_block_t *EPs, int nEP)
 #endif
 
 	}
-	debugSendString("X\n");
+	printUSBstate();
 }
 
 int USBepRead(int EPid, void *buf, int len)
 {
-	if ((USB_EP(EPid) & USB_EP_STAT_RX) != USB_RX_NAK)
-	{
-		debugSendString("Failed reading on EP");
-		debugSendString(Dhex2str(EPid));
-		debugSendString(" \n");
-		return 0;
-	}
-
 	int N = len < (USB_BDT(EPid)->COUNT_RX & USB_COUNT0_RX_COUNT0_RX) ? len : (USB_BDT(EPid)->COUNT_RX & USB_COUNT0_RX_COUNT0_RX);
 
 	uint32_t *src = (uint32_t *)(PMA_BASE + (USB_BDT(EPid)->ADDR_RX << 1U));
@@ -231,7 +278,9 @@ int USBepRead(int EPid, void *buf, int len)
 	for (int n = (N + 1) / 2; 0 != n; n--) *dst++ = *src++;
 
 	/* Allow new incoming data */
-	USB_EP(EPid) = (USB_EP(EPid) & ~USB_TOGGLE_MASK) | USB_CLEAR_MASK | USB_EP_FLIP_RX;
+
+	uint16_t x = USB_EP(EPid);
+	USB_EP(EPid) = ((x & USB_EP_STAT_RX) ^ USB_RX_VALID) | (x & (USB_EP_EA | USB_EP_KIND | USB_EP_TYPE ) ) | USB_EP_CTR_TX;
 
 	return N;
 }
@@ -245,6 +294,10 @@ int USBepSend(int EPid, const void *buf, int len)
 		debugSendString("\n");
 		while ((USB_EP(EPid) & USB_EP_STAT_TX) != USB_TX_NAK);
 	}
+
+	debugSendString("Sending on EP ");
+	debugSendString(Dhex2str(EPid));
+	debugSendString("\n");
 
 	uint32_t *dst = (uint32_t *) (PMA_BASE + (USB_BDT(EPid)->ADDR_TX << 1U));
 	uint16_t *src = (uint16_t *) buf;

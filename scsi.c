@@ -10,7 +10,7 @@
 #include <usb.h>
 #include <debug.h>
 
-int SCSIhandleCommandBlock(uint8_t *CB, uint8_t len);
+// int SCSIhandleCommandBlock(uint8_t *CB, uint8_t len);
 
 #ifdef DEBUG_SCSI
 void dropCommandBlock(uint8_t *CB, uint8_t len)
@@ -39,14 +39,15 @@ static const uint8_t inquiryData[0x24] =
 		'0', '.', '0', '1'
 };
 
-int SCSIhandleCommandBlock(uint8_t *CB, uint8_t len)
+int SCSIhandleCommandBlock(uint8_t *CB, uint8_t len, USB_command_status_wrapper *csw)
 {
+	int returnCode = 1;
+
 #ifdef DEBUG_SCSI
-	debugSendString("New SCSI command string: ");
-	dropCommandBlock(CB, len);
+	debugSendString("SCSI command ");
+	debugSendString(Dhex2str(CB[0]));
 	debugSendString("\n");
 #endif
-
 	switch (CB[0])
 	{
 	case SCSI_CMD_INQUIRY:
@@ -55,13 +56,34 @@ int SCSIhandleCommandBlock(uint8_t *CB, uint8_t len)
 #ifdef DEBUG_SCSI
 			debugSendString("Strange flags in SCSI INQUIRY request!");
 #endif
-			return 0x10;
+			returnCode = 0x10;
+			break;
 		}
 
-		USBepSend(1, &inquiryData, sizeof(inquiryData));
-		return 0;
+		csw->dataResidue -= USBepSend(1, &inquiryData, sizeof(inquiryData));
+		returnCode = 0;
+		break;
 
 	default:
-		return 1;
+#ifdef DEBUG_SCSI
+		debugSendString("Could not interpret SCSI command string: ");
+		dropCommandBlock(CB, len);
+		debugSendString("\n");
+
+		return returnCode;
+#else
+		break;
+#endif
 	}
+
+#ifdef DEBUG_SCSI
+	if ((returnCode != 0) && (returnCode != 1))
+	{
+		debugSendString("Error processing SCSI command string: ");
+		dropCommandBlock(CB, len);
+		debugSendString("\n");
+	}
+#endif
+
+	return returnCode;
 }

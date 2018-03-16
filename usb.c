@@ -9,7 +9,6 @@
 #include "scsi.h"
 #include <debug.h>
 #include <usb.h>
-void ttfunc();
 extern uint16_t *USBstringDesc[];
 extern const USB_device_descriptor_t USBdevDesc;
 extern const USB_combined_MS_descriptor_t USBcomboMSdesc;
@@ -74,6 +73,8 @@ void dumpCBW(USB_command_block_wrapper *cbw)
 void USBCallback(uint16_t event)
 {
 	static uint8_t newAddress = 0;
+	static int calls = 3;
+
 	uint8_t what = event & 0x00FF;
 	uint8_t EPid = event >> 8;
 
@@ -83,9 +84,9 @@ void USBCallback(uint16_t event)
 #ifdef DEBUG_USB
 		debugSendString("Got Reset Command.\n");
 #endif
-		USBconfigEPs(&EPConfig, 2);
 		USBsetAddress(0);
 		USBresume();
+		USBconfigEPs(&EPConfig, 2);
 		return;
 
 	case USBsetupCmd :
@@ -186,7 +187,6 @@ void USBCallback(uint16_t event)
 #ifdef DEBUG_USB
 				debugSendString("Max LUN requested.\n");
 #endif
-				//uint8_t maxLun = 0;
 				USBepSend(0, &USB_MAX_LUN, 1);
 
 				return;
@@ -228,8 +228,9 @@ else
 	case USBtransOut :
 		if (EPid == 2)
 		{
+			if (calls-- == 0) USBdisable();
+
 			debugSendString("Data on EP2!\n");
-			USBdisable();
 
 			USB_command_block_wrapper cbw;
 			USBepRead(2, &cbw, sizeof(cbw));
@@ -243,7 +244,22 @@ else
 			}
 			else
 			{
-				(SCSIhandleCommandBlock(cbw.commandBlock, cbw.CBlength));
+				USB_command_status_wrapper csw;
+
+				csw.signature = CSW_SIGN;
+				csw.dataResidue = cbw.dataTransferLength;
+				csw.tag = cbw.tag;
+				if (0 == SCSIhandleCommandBlock(cbw.commandBlock, cbw.CBlength, &csw))
+				{
+					csw.status = USB_CSW_COMMAND_PASSED;
+				}
+				else
+				{
+					csw.status = USB_CSW_COMMAND_FAILED;
+				}
+
+				USBepSend(1, &csw, sizeof(csw));
+				// USBdisable();
 				return;
 			}
 		}
