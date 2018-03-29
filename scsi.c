@@ -39,6 +39,23 @@ static const uint8_t inquiryData[0x24] =
 		'0', '.', '0', '1'
 };
 
+typedef struct
+{
+	uint8_t		reserved[3];
+	uint8_t 	listLength;
+	uint8_t 	numberOfBlocks[4];	/* Note: should be Big Endian */
+	uint8_t		descriptorType;
+	uint8_t		blockLength[3];
+} __attribute__((packed)) formatCapacitiesData;
+
+const formatCapacitiesData capData = {
+	.reserved = 		{00, 00, 00},
+	.listLength = 		8,
+	.numberOfBlocks =   {00, 00, 04, 00},
+	.descriptorType =	2,
+	.blockLength =		{00, 02, 00}
+};
+
 int SCSIhandleCommandBlock(uint8_t *CB, uint8_t len, USB_command_status_wrapper *csw)
 {
 	int returnCode = 1;
@@ -61,6 +78,14 @@ int SCSIhandleCommandBlock(uint8_t *CB, uint8_t len, USB_command_status_wrapper 
 		}
 
 		csw->dataResidue -= USBepSend(1, &inquiryData, sizeof(inquiryData));
+		returnCode = 0;
+		break;
+
+	case SCSI_READ_FORMAT_CAPACITIES: ;
+		int allocationLength = CB[8] + (((int) CB[7]) << 8);
+
+		if (sizeof(capData) < allocationLength) allocationLength = sizeof(capData);
+		csw->dataResidue -= USBepSend(1, &capData, allocationLength);
 		returnCode = 0;
 		break;
 

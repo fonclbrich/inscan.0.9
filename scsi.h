@@ -8,7 +8,8 @@
 #ifndef STM32F10X_SCSI_H_
 #define STM32F10X_SCSI_H_
 
-#define SCSI_CMD_INQUIRY		0x12
+#define SCSI_CMD_INQUIRY				0x12
+#define SCSI_READ_FORMAT_CAPACITIES		0x23
 
 #include <stdint.h>
 #include <usb.h>

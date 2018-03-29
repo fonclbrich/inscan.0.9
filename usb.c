@@ -228,7 +228,7 @@ else
 	case USBtransOut :
 		if (EPid == 2)
 		{
-			if (calls-- == 0) USBdisable();
+			// if (calls-- == 0) USBdisable();
 
 			debugSendString("Data on EP2!\n");
 
@@ -259,7 +259,6 @@ else
 				}
 
 				USBepSend(1, &csw, sizeof(csw));
-				// USBdisable();
 				return;
 			}
 		}
